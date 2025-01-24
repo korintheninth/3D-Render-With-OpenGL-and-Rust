@@ -8,7 +8,7 @@ use glutin::{
 use glow::HasContext;
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use winit::window::Window;
-use std::ffi::CString;
+use std::{ffi::CString, vec};
 use std::fs;
 use std::path::Path;
 use glam::{Vec3, Mat4};
@@ -268,13 +268,18 @@ impl RenderManager {
        
         let time = self.start_time.elapsed().as_secs_f32();
         
-        let rotation = Mat4::from_rotation_y(time * 5.0); // Rotate around Y axis
+        let camera_pos = Vec3::new(0.0, 0.0, 5.0 * scroll as f32);
+        let camera_direction = Vec3::new(0.0, 0.0, 0.0);
+
+        let rotation = Mat4::from_rotation_y(mouse.0 as f32 * 0.005) * Mat4::from_rotation_x(mouse.1 as f32 * 0.005);
         let model_matrix = rotation;
         let view_matrix = Mat4::look_at_rh(
-            Vec3::new(0.0, 0.0, 5.0), // Camera position
-            Vec3::new(0.0, 0.0, 0.0), // Look at point
+            camera_pos, // Camera position
+            camera_direction, // Look at
             Vec3::new(0.0, 1.0, 0.0), // Up vector
         );
+
+        //let projection_matrix = Mat4::orthographic_lh(-5.0, 5.0, -5.0, 5.0, 0.1, 100.0);
         let projection_matrix = Mat4::perspective_rh(
             45.0_f32.to_radians(),
             size.0 as f32 / size.1 as f32,
@@ -303,16 +308,20 @@ impl RenderManager {
                 &projection_matrix.to_cols_array(),
             );
 
-            // Enable depth testing
+            let camera_loc = self.gl.get_uniform_location(self.shader_program, "lightPos");
+            self.gl.uniform_3_f32(
+                camera_loc.as_ref(),
+                camera_pos.x,
+                camera_pos.y,
+                camera_pos.z,);
             self.gl.enable(glow::DEPTH_TEST);
             self.gl.clear(glow::COLOR_BUFFER_BIT | glow::DEPTH_BUFFER_BIT);
            
-            self.gl.viewport(0, 0, size.0 as i32, size.1 as i32);
+            self.gl.viewport(0, 0, (size.0) as i32, (size.1) as i32);
             
             self.gl.use_program(Some(self.shader_program));
 
             self.gl.clear_color(0.0, 0.0, 0.0, 1.0);
-            self.gl.clear(glow::COLOR_BUFFER_BIT);
             
             self.gl.bind_vertex_array(Some(self.vao));
             self.gl.draw_elements(
