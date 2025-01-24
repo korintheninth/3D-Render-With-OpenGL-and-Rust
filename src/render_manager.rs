@@ -8,9 +8,8 @@ use glutin::{
 use glow::HasContext;
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use winit::window::Window;
-use std::{ffi::CString, vec};
-use std::fs;
-use std::path::Path;
+use std::{ffi::CString, fs};
+use std::path::PathBuf;
 use glam::{Vec3, Mat4};
 
 pub struct RenderManager {
@@ -25,9 +24,22 @@ pub struct RenderManager {
 
 impl RenderManager {
 
+    fn get_asset_path(relative_path: &str) -> PathBuf {
+        let base_dir = if cfg!(debug_assertions) {
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        } else {
+            std::env::current_exe()
+                .unwrap()
+                .parent()
+                .unwrap()
+                .to_path_buf()
+        };
+        
+        return base_dir.join(relative_path)
+    }
+
     fn load_mesh(path: &str) -> (Vec<f32>, Vec<u32>) {
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let obj_path = Path::new(manifest_dir).join("src").join(path);
+        let obj_path = Self::get_asset_path(path);
 
         let (models, _) = tobj::load_obj(&obj_path, &tobj::LoadOptions {
             triangulate: true,
@@ -75,8 +87,7 @@ impl RenderManager {
     }
 
     fn load_shader(shader_path: &str) -> String {
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let shader_path = Path::new(manifest_dir).join("src").join(shader_path);
+        let shader_path = Self::get_asset_path(shader_path);
         fs::read_to_string(&shader_path)
             .unwrap_or_else(|_| panic!("Failed to read shader file: {}", shader_path.display()))
     }
@@ -143,12 +154,6 @@ impl RenderManager {
                     .as_raw()
             ));
 
-        let context = unsafe {
-            display
-                .create_context(&config, &context_attributes)
-                .expect("Failed to create context")
-        };
-
         let size = window.inner_size();
         let surface_attributes = 
             glutin::surface::SurfaceAttributesBuilder::<WindowSurface>::new().build(
@@ -166,9 +171,13 @@ impl RenderManager {
                 .expect("Failed to create surface")
         };
 
-        let context = context
-            .make_current(&surface)
-            .expect("Failed to make context current");
+        let context = unsafe {
+            display
+                .create_context(&config, &context_attributes)
+                .expect("Failed to create context")
+                .make_current(&surface)
+                .expect("Failed to make context current")
+        };
 
         let gl = unsafe {
             glow::Context::from_loader_function(|s| {

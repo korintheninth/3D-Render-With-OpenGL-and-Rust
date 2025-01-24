@@ -23,9 +23,11 @@ impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let window_attributes = Window::default_attributes()
             .with_title("3D Window")
-            .with_maximized(true);
+            .with_visible(false);
         let window = event_loop.create_window(window_attributes).unwrap();
         self.render_manager = Some(RenderManager::new(&window));
+        window.set_visible(true);
+        window.set_maximized(true);
         self.window = Some(window);
     }
 
