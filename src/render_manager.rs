@@ -10,7 +10,6 @@ use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use winit::window::Window;
 use std::ffi::CString;
 use glam::{Vec3, Mat4};
-use rayon::prelude::*;
 use crate::utils;
 
 pub struct RenderManager {
@@ -29,7 +28,6 @@ impl RenderManager {
             .with_alpha_size(8)
             .build();
 
-        // Create display
         let display = unsafe {
             Display::new(
                 window.display_handle()
@@ -89,128 +87,24 @@ impl RenderManager {
                 display.get_proc_address(s.as_c_str()) as *const _
             })
         };
+        
+        let vertex_source = utils::load_shader("shaders/modelvertexshader.glsl");
+        let fragment_source = utils::load_shader("shaders/modelfragmentshader.glsl");
+        // Create shader program first
+        let vertex_shader = utils::compile_shader(&gl, &vertex_source, glow::VERTEX_SHADER);
+        let fragment_shader = utils::compile_shader(&gl, &fragment_source, glow::FRAGMENT_SHADER);
+        let shader_program = utils::create_shader_program(&gl, vertex_shader, fragment_shader);
+        
+        let (vao, num_indices) = utils::load_model_with_textures(&gl, &shader_program, "objs/Guitar_01_OBJ/Guitar_01.obj");
 
-        let (vertices, indices)  = utils::load_mesh("objs/Guitar_01_OBJ/Guitar_01.obj");
-
-        let texture_paths = vec![
-            "objs/Guitar_01_OBJ/Guitar_01_Textures_Unity/guitar_01_AlbedoTransparency.png",
-            "objs/Guitar_01_OBJ/Guitar_01_Textures_Unity/guitar_01_AO.png",
-            "objs/Guitar_01_OBJ/Guitar_01_Textures_Unity/guitar_01_MetallicSmoothness.png",
-            "objs/Guitar_01_OBJ/Guitar_01_Textures_Unity/guitar_01_Normal.png",
-        ];
-
-
-        let images: Vec<_> = utils::profile("images", || {texture_paths
-            .par_iter()
-            .map(|path| utils::get_image_data(path))
-            .collect()});
-
-        let textures: Vec<_> = images
-            .into_iter()
-            .map(|image| utils::generate_texture(&gl, image).unwrap())
-            .collect();
-
-        unsafe {
-            let vao = gl.create_vertex_array().unwrap();
-            let vbo = gl.create_buffer().unwrap();
-            let ebo = gl.create_buffer().unwrap();
-            
-            gl.bind_vertex_array(Some(vao));
-
-            gl.bind_buffer(glow::ARRAY_BUFFER, Some(vbo));
-            gl.buffer_data_u8_slice(
-                glow::ARRAY_BUFFER,
-                bytemuck::cast_slice(&vertices),
-                glow::STATIC_DRAW,
-            );
-
-            gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(ebo));
-            gl.buffer_data_u8_slice(
-                glow::ELEMENT_ARRAY_BUFFER,
-                bytemuck::cast_slice(&indices),
-                glow::STATIC_DRAW,
-            );
-
-            const POSITION_ATTRIB: u32 = 0;
-            const NORMAL_ATTRIB: u32 = 1;
-            const TEXCOORD_ATTRIB: u32 = 2;
-
-            const VERTEX_SIZE: usize = std::mem::size_of::<f32>();
-            const STRIDE: i32 = (8 * VERTEX_SIZE) as i32; // 3 pos + 3 normal + 2 uv = 8 floats
-
-            const POSITION_OFFSET: i32 = 0;
-            const NORMAL_OFFSET: i32 = (3 * VERTEX_SIZE) as i32;
-            const TEXCOORD_OFFSET: i32 = (6 * VERTEX_SIZE) as i32;
-
-            gl.vertex_attrib_pointer_f32(
-                POSITION_ATTRIB,
-                3,  // vec3
-                glow::FLOAT,
-                false,
-                STRIDE,
-                POSITION_OFFSET
-            );
-
-            gl.vertex_attrib_pointer_f32(
-                NORMAL_ATTRIB,
-                3,  // vec3
-                glow::FLOAT,
-                false,
-                STRIDE,
-                NORMAL_OFFSET
-            );
-
-            gl.vertex_attrib_pointer_f32(
-                TEXCOORD_ATTRIB,
-                2,  // vec2
-                glow::FLOAT,
-                false,
-                STRIDE,
-                TEXCOORD_OFFSET
-            );
-
-            // Don't forget to enable all attribute arrays
-            gl.enable_vertex_attrib_array(POSITION_ATTRIB);
-            gl.enable_vertex_attrib_array(NORMAL_ATTRIB);
-            gl.enable_vertex_attrib_array(TEXCOORD_ATTRIB);
-
-            let vertex_source = utils::load_shader("shaders/modelvertexshader.glsl");
-            let fragment_source = utils::load_shader("shaders/modelfragmentshader.glsl");
-            // Create shader program first
-            let vertex_shader = utils::compile_shader(&gl, &vertex_source, glow::VERTEX_SHADER);
-            let fragment_shader = utils::compile_shader(&gl, &fragment_source, glow::FRAGMENT_SHADER);
-            let shader_program = utils::create_shader_program(&gl, vertex_shader, fragment_shader);
-
-            gl.active_texture(glow::TEXTURE0);
-            gl.bind_texture(glow::TEXTURE_2D, Some(textures[0]));
-            let albedotexture_loc = gl.get_uniform_location(shader_program, "albedoMap");
-            gl.uniform_1_i32(albedotexture_loc.as_ref(), 0);
-            
-            gl.active_texture(glow::TEXTURE1);
-            gl.bind_texture(glow::TEXTURE_2D, Some(textures[1]));
-            let ao_loc = gl.get_uniform_location(shader_program, "aoMap");
-            gl.uniform_1_i32(ao_loc.as_ref(), 1);
-            
-            gl.active_texture(glow::TEXTURE2);
-            gl.bind_texture(glow::TEXTURE_2D, Some(textures[2]));
-            let metallic_loc = gl.get_uniform_location(shader_program, "metallicMap");
-            gl.uniform_1_i32(metallic_loc.as_ref(), 2);
-            
-            gl.active_texture(glow::TEXTURE3);
-            gl.bind_texture(glow::TEXTURE_2D, Some(textures[3]));
-            let normal_loc = gl.get_uniform_location(shader_program, "normalMap");
-            gl.uniform_1_i32(normal_loc.as_ref(), 3);
-
-            // Create instance with actual shader program
-            Self {
-                gl,
-                surface,
-                context,
-                shader_program,
-                vao,
-                //start_time: std::time::Instant::now(),
-                num_indices: indices.len() as i32,
-            }
+        Self {
+            gl,
+            surface,
+            context,
+            shader_program,
+            vao,
+            //start_time: std::time::Instant::now(),
+            num_indices,
 		}
     }
 
