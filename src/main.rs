@@ -1,5 +1,6 @@
 mod window_manager;
 mod render_manager;
+mod utils;
 
 use winit::event_loop::{ControlFlow, EventLoop};
 use window_manager::App;
