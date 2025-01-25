@@ -15,7 +15,7 @@ where
 }
 
 pub fn get_image_data(path: &str) -> image::RgbaImage {
-		let image =  image::open(get_asset_path(path)).unwrap().into_rgba8(); //flip your textures beforehand
+		let image =  image::open(get_asset_path(path)).unwrap().flipv().into_rgba8();
 		image
 }
 
