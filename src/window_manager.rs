@@ -73,7 +73,7 @@ impl ApplicationHandler for App {
                     POS = (position.x, position.y);
                 }
             }
-            WindowEvent::MouseInput { device_id: _, state, button} => {
+            WindowEvent::MouseInput { device_id: _, state, button:_} => {
                 if state == winit::event::ElementState::Pressed {
                     unsafe {
                         PRESSED = true;

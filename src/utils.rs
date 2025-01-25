@@ -3,7 +3,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::Instant;
 
-fn profile<F, T>(name: &str, f: F) -> T 
+pub fn profile<F, T>(name: &str, f: F) -> T 
 where 
     F: FnOnce() -> T 
 {
@@ -15,16 +15,13 @@ where
 }
 
 pub fn get_image_data(path: &str) -> image::RgbaImage {
-		let image =profile("image loading", || { image::open(get_asset_path(path)).unwrap()});
-		let flipped = profile("flip", ||{image.flipv()});
-		let rgb8 = profile("convert", || {flipped.into_rgba8()});;
-		rgb8
+		let image =  image::open(get_asset_path(path)).unwrap().into_rgba8(); //flip your textures beforehand
+		image
 }
 
-pub fn generate_texture(gl: &glow::Context, path: &str) -> Result<glow::Texture, Box<dyn std::error::Error>> {
+pub fn generate_texture(gl: &glow::Context, image: image::RgbaImage) -> Result<glow::Texture, Box<dyn std::error::Error>> {
     unsafe {
         // Load image
-        let image = get_image_data(path);
         let (width, height) = image.dimensions();
 
         // Create texture

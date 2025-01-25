@@ -8,8 +8,9 @@ use glutin::{
 use glow::HasContext;
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use winit::window::Window;
-use std::{ffi::CString};
+use std::ffi::CString;
 use glam::{Vec3, Mat4};
+use rayon::prelude::*;
 use crate::utils;
 
 pub struct RenderManager {
@@ -18,7 +19,7 @@ pub struct RenderManager {
     context: glutin::context::PossiblyCurrentContext,
 	shader_program: glow::Program,
 	vao: glow::VertexArray,
-	start_time: std::time::Instant,
+	//start_time: std::time::Instant,
     num_indices: i32,
 }
 
@@ -91,11 +92,23 @@ impl RenderManager {
 
         let (vertices, indices)  = utils::load_mesh("objs/Guitar_01_OBJ/Guitar_01.obj");
 
-        let albedotexture = utils::generate_texture(&gl, "objs/Guitar_01_OBJ/Guitar_01_Textures_Unity/guitar_01_AlbedoTransparency.png").unwrap();
-        let aotexture = utils::generate_texture(&gl, "objs/Guitar_01_OBJ/Guitar_01_Textures_Unity/guitar_01_AO.png").unwrap();
-        let metallictexture = utils::generate_texture(&gl, "objs/Guitar_01_OBJ/Guitar_01_Textures_Unity/guitar_01_MetallicSmoothness.png").unwrap();
-        let normaltexture = utils::generate_texture(&gl, "objs/Guitar_01_OBJ/Guitar_01_Textures_Unity/guitar_01_Normal.png").unwrap();
+        let texture_paths = vec![
+            "objs/Guitar_01_OBJ/Guitar_01_Textures_Unity/guitar_01_AlbedoTransparency.png",
+            "objs/Guitar_01_OBJ/Guitar_01_Textures_Unity/guitar_01_AO.png",
+            "objs/Guitar_01_OBJ/Guitar_01_Textures_Unity/guitar_01_MetallicSmoothness.png",
+            "objs/Guitar_01_OBJ/Guitar_01_Textures_Unity/guitar_01_Normal.png",
+        ];
 
+
+        let images: Vec<_> = utils::profile("images", || {texture_paths
+            .par_iter()
+            .map(|path| utils::get_image_data(path))
+            .collect()});
+
+        let textures: Vec<_> = images
+            .into_iter()
+            .map(|image| utils::generate_texture(&gl, image).unwrap())
+            .collect();
 
         unsafe {
             let vao = gl.create_vertex_array().unwrap();
@@ -169,22 +182,22 @@ impl RenderManager {
             let shader_program = utils::create_shader_program(&gl, vertex_shader, fragment_shader);
 
             gl.active_texture(glow::TEXTURE0);
-            gl.bind_texture(glow::TEXTURE_2D, Some(albedotexture));
+            gl.bind_texture(glow::TEXTURE_2D, Some(textures[0]));
             let albedotexture_loc = gl.get_uniform_location(shader_program, "albedoMap");
             gl.uniform_1_i32(albedotexture_loc.as_ref(), 0);
             
             gl.active_texture(glow::TEXTURE1);
-            gl.bind_texture(glow::TEXTURE_2D, Some(aotexture));
+            gl.bind_texture(glow::TEXTURE_2D, Some(textures[1]));
             let ao_loc = gl.get_uniform_location(shader_program, "aoMap");
             gl.uniform_1_i32(ao_loc.as_ref(), 1);
             
             gl.active_texture(glow::TEXTURE2);
-            gl.bind_texture(glow::TEXTURE_2D, Some(metallictexture));
+            gl.bind_texture(glow::TEXTURE_2D, Some(textures[2]));
             let metallic_loc = gl.get_uniform_location(shader_program, "metallicMap");
             gl.uniform_1_i32(metallic_loc.as_ref(), 2);
             
             gl.active_texture(glow::TEXTURE3);
-            gl.bind_texture(glow::TEXTURE_2D, Some(normaltexture));
+            gl.bind_texture(glow::TEXTURE_2D, Some(textures[3]));
             let normal_loc = gl.get_uniform_location(shader_program, "normalMap");
             gl.uniform_1_i32(normal_loc.as_ref(), 3);
 
@@ -195,7 +208,7 @@ impl RenderManager {
                 context,
                 shader_program,
                 vao,
-                start_time: std::time::Instant::now(),
+                //start_time: std::time::Instant::now(),
                 num_indices: indices.len() as i32,
             }
 		}
@@ -203,7 +216,7 @@ impl RenderManager {
 
     pub fn render(&self, size: (u32, u32), mouse: (f64, f64), scroll: f64, modelpos: (f32, f32), camera: (f32, f32)) {
        
-        let time = self.start_time.elapsed().as_secs_f32();
+        //let time = self.start_time.elapsed().as_secs_f32();
         
         let camera_pos = Vec3::new(0.0, 0.0, 5.0 * scroll as f32);
 
