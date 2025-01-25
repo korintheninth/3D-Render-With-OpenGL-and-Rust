@@ -22,7 +22,58 @@ pub struct RenderManager {
     num_indices: i32,
 }
 
-impl RenderManager {
+impl RenderManager {    
+    fn generate_texture(gl: &glow::Context, path: &str) -> Result<glow::Texture, Box<dyn std::error::Error>> {
+        unsafe {
+            // Load image
+            let image = image::open(Self::get_asset_path(path))?.flipv().into_rgba8();
+            let (width, height) = image.dimensions();
+
+            // Create texture
+            let texture = gl.create_texture()?;
+            gl.bind_texture(glow::TEXTURE_2D, Some(texture));
+
+            // Set texture parameters
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_MIN_FILTER,
+                glow::LINEAR_MIPMAP_LINEAR as i32,
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_MAG_FILTER,
+                glow::LINEAR as i32,
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_WRAP_S,
+                glow::REPEAT as i32,
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_WRAP_T,
+                glow::REPEAT as i32,
+            );
+
+            // Upload texture data
+            gl.tex_image_2d(
+                glow::TEXTURE_2D,
+                0,
+                glow::RGBA as i32,
+                width as i32,
+                height as i32,
+                0,
+                glow::RGBA,
+                glow::UNSIGNED_BYTE,
+                glow::PixelUnpackData::Slice(Some(&image)),
+            );
+
+            // Generate mipmaps
+            gl.generate_mipmap(glow::TEXTURE_2D);
+
+            Ok(texture)
+        }
+    }
 
     fn get_asset_path(relative_path: &str) -> PathBuf {
         let base_dir = if cfg!(debug_assertions) {
@@ -79,7 +130,6 @@ impl RenderManager {
                 }
             }
 
-            // Store indices
             indices.extend_from_slice(&mesh.indices);
         }
 
@@ -186,7 +236,12 @@ impl RenderManager {
             })
         };
 
-        let (vertices, indices)  = Self::load_mesh("objs/monkey.obj");
+        let (vertices, indices)  = Self::load_mesh("objs/Guitar_01_OBJ/Guitar_01.obj");
+
+        let albedotexture = Self::generate_texture(&gl, "objs/Guitar_01_OBJ/Guitar_01_Textures_Unity/guitar_01_AlbedoTransparency.png").unwrap();
+        let aotexture = Self::generate_texture(&gl, "objs/Guitar_01_OBJ/Guitar_01_Textures_Unity/guitar_01_AO.png").unwrap();
+        let metallictexture = Self::generate_texture(&gl, "objs/Guitar_01_OBJ/Guitar_01_Textures_Unity/guitar_01_MetallicSmoothness.png").unwrap();
+        let normaltexture = Self::generate_texture(&gl, "objs/Guitar_01_OBJ/Guitar_01_Textures_Unity/guitar_01_Normal.png").unwrap();
 
 
         unsafe {
@@ -260,6 +315,26 @@ impl RenderManager {
             let fragment_shader = Self::compile_shader(&gl, &fragment_source, glow::FRAGMENT_SHADER);
             let shader_program = Self::create_shader_program(&gl, vertex_shader, fragment_shader);
 
+            gl.active_texture(glow::TEXTURE0);
+            gl.bind_texture(glow::TEXTURE_2D, Some(albedotexture));
+            let albedotextureLoc = gl.get_uniform_location(shader_program, "albedoMap");
+            gl.uniform_1_i32(albedotextureLoc.as_ref(), 0);
+            
+            gl.active_texture(glow::TEXTURE1);
+            gl.bind_texture(glow::TEXTURE_2D, Some(aotexture));
+            let aoLoc = gl.get_uniform_location(shader_program, "aoMap");
+            gl.uniform_1_i32(aoLoc.as_ref(), 1);
+            
+            gl.active_texture(glow::TEXTURE2);
+            gl.bind_texture(glow::TEXTURE_2D, Some(metallictexture));
+            let metallicLoc = gl.get_uniform_location(shader_program, "metallicMap");
+            gl.uniform_1_i32(metallicLoc.as_ref(), 2);
+            
+            gl.active_texture(glow::TEXTURE3);
+            gl.bind_texture(glow::TEXTURE_2D, Some(normaltexture));
+            let normalLoc = gl.get_uniform_location(shader_program, "normalMap");
+            gl.uniform_1_i32(normalLoc.as_ref(), 3);
+
             // Create instance with actual shader program
             Self {
                 gl,
@@ -273,19 +348,29 @@ impl RenderManager {
 		}
     }
 
-    pub fn render(&self, size: (u32, u32), mouse: (f64, f64), scroll: f64) {
+    pub fn render(&self, size: (u32, u32), mouse: (f64, f64), scroll: f64, modelpos: (f32, f32), camera: (f32, f32)) {
        
         let time = self.start_time.elapsed().as_secs_f32();
         
         let camera_pos = Vec3::new(0.0, 0.0, 5.0 * scroll as f32);
-        let camera_direction = Vec3::new(0.0, 0.0, 0.0);
 
         let rotation = Mat4::from_rotation_y(mouse.0 as f32 * 0.005) * Mat4::from_rotation_x(mouse.1 as f32 * 0.005);
-        let model_matrix = rotation;
+        let translation = Mat4::from_translation(Vec3::new(modelpos.0, modelpos.1, 0.0));
+        let model_matrix = rotation * translation;
+        
+        let y_rot = camera.0 as f32 * 0.5;
+        let x_rot = camera.1 as f32 * 0.5;
+
+        let camera_direction = Vec3::new(
+            y_rot.sin() * x_rot.cos(),
+            -x_rot.sin(),
+            y_rot.cos() * x_rot.cos()
+        ).normalize();
+
         let view_matrix = Mat4::look_at_rh(
-            camera_pos, // Camera position
-            camera_direction, // Look at
-            Vec3::new(0.0, 1.0, 0.0), // Up vector
+            camera_pos,
+            camera_pos - camera_direction,
+            Vec3::new(0.0, 1.0, 0.0),
         );
 
         //let projection_matrix = Mat4::orthographic_lh(-5.0, 5.0, -5.0, 5.0, 0.1, 100.0);
@@ -317,13 +402,20 @@ impl RenderManager {
                 &projection_matrix.to_cols_array(),
             );
 
-            let camera_loc = self.gl.get_uniform_location(self.shader_program, "lightPos");
+            let camera_loc = self.gl.get_uniform_location(self.shader_program, "cameraPos");
             self.gl.uniform_3_f32(
                 camera_loc.as_ref(),
                 camera_pos.x,
                 camera_pos.y,
                 camera_pos.z,);
             self.gl.enable(glow::DEPTH_TEST);
+            let camera_dir_loc = self.gl.get_uniform_location(self.shader_program, "cameraDir");
+            self.gl.uniform_3_f32(
+                camera_dir_loc.as_ref(),
+                camera_direction.x,
+                camera_direction.y,
+                camera_direction.z,);
+
             self.gl.clear(glow::COLOR_BUFFER_BIT | glow::DEPTH_BUFFER_BIT);
            
             self.gl.viewport(0, 0, (size.0) as i32, (size.1) as i32);
