@@ -186,7 +186,7 @@ impl RenderManager {
             for i in 0..self.vaos.len() {
 
                 let rotation = Mat4::from_rotation_y(mouse.0 as f32 * 0.005) * Mat4::from_rotation_x(mouse.1 as f32 * 0.005);
-                let translation = Mat4::from_translation(Vec3::new(modelpos.0 - 5.0 * i as f32, modelpos.1, 0.0));
+                let translation = Mat4::from_translation(Vec3::new(modelpos.0 + 2.5  - 5.0 * i as f32, modelpos.1, 0.0));
                 let model_matrix = rotation * translation;
 
                 self.gl.uniform_matrix_4_f32_slice(

@@ -8,3 +8,7 @@ Simple 3D renderer using OpenGL, implemented in Rust.
 ## Requirements
 - Rust
 - OpenGL compatible GPU
+
+## .obj and Texture File order
+- Texture files should have the names: AlbedoTransparency.png, AO.png, MetallicSmoothness.png, Normal.png
+- Folder Containing the textures should be in the same directory as the .obj file and for a .obj file with name modelName.obj folder for textures should have the name modelNameTextures
