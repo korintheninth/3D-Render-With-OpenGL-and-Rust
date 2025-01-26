@@ -17,9 +17,9 @@ pub struct RenderManager {
     surface: Surface<WindowSurface>,
     context: glutin::context::PossiblyCurrentContext,
 	shader_program: glow::Program,
-	vao: glow::VertexArray,
+	vaos: Vec<glow::VertexArray>,
 	//start_time: std::time::Instant,
-    num_indices: i32,
+    nums_of_indices: Vec<i32>,
 }
 
 impl RenderManager {    
@@ -95,16 +95,24 @@ impl RenderManager {
         let fragment_shader = utils::compile_shader(&gl, &fragment_source, glow::FRAGMENT_SHADER);
         let shader_program = utils::create_shader_program(&gl, vertex_shader, fragment_shader);
         
-        let (vao, num_indices) = utils::load_model_with_textures(&gl, &shader_program, "objs/Guitar_01_OBJ/Guitar_01.obj");
+        let mut vaos: Vec<glow::VertexArray>;
+        let mut nums_of_indices: Vec<i32>;
+
+        let (mut vao, mut num_indices) = utils::load_model_with_textures(&gl, &shader_program, "objs/Guitar_01_OBJ/Guitar_01.obj");
+        vaos = vec![vao];
+        nums_of_indices = vec![num_indices];
+        (vao, num_indices) = utils::load_model_with_textures(&gl, &shader_program, "objs/Guitar_01_OBJ/Guitar_01.obj");
+        vaos.push(vao);
+        nums_of_indices.push(num_indices);
 
         Self {
             gl,
             surface,
             context,
             shader_program,
-            vao,
+            vaos,
             //start_time: std::time::Instant::now(),
-            num_indices,
+            nums_of_indices,
 		}
     }
 
@@ -113,10 +121,6 @@ impl RenderManager {
         //let time = self.start_time.elapsed().as_secs_f32();
         
         let camera_pos = Vec3::new(0.0, 0.0, 5.0 * scroll as f32);
-
-        let rotation = Mat4::from_rotation_y(mouse.0 as f32 * 0.005) * Mat4::from_rotation_x(mouse.1 as f32 * 0.005);
-        let translation = Mat4::from_translation(Vec3::new(modelpos.0, modelpos.1, 0.0));
-        let model_matrix = rotation * translation;
         
         let y_rot = camera.0 as f32 * 0.5;
         let x_rot = camera.1 as f32 * 0.5;
@@ -146,11 +150,6 @@ impl RenderManager {
             let view_loc = self.gl.get_uniform_location(self.shader_program, "view");
             let proj_loc = self.gl.get_uniform_location(self.shader_program, "projection");
 
-            self.gl.uniform_matrix_4_f32_slice(
-                model_loc.as_ref(),
-                false,
-                &model_matrix.to_cols_array(),
-            );
             self.gl.uniform_matrix_4_f32_slice(
                 view_loc.as_ref(),
                 false,
@@ -184,13 +183,26 @@ impl RenderManager {
 
             self.gl.clear_color(0.0, 0.0, 0.0, 1.0);
             
-            self.gl.bind_vertex_array(Some(self.vao));
-            self.gl.draw_elements(
-                glow::TRIANGLES,
-                self.num_indices,
-                glow::UNSIGNED_INT,
-                0,
-            );
+            for i in 0..self.vaos.len() {
+
+                let rotation = Mat4::from_rotation_y(mouse.0 as f32 * 0.005) * Mat4::from_rotation_x(mouse.1 as f32 * 0.005);
+                let translation = Mat4::from_translation(Vec3::new(modelpos.0 - 5.0 * i as f32, modelpos.1, 0.0));
+                let model_matrix = rotation * translation;
+
+                self.gl.uniform_matrix_4_f32_slice(
+                    model_loc.as_ref(),
+                    false,
+                    &model_matrix.to_cols_array(),
+                );
+                
+                self.gl.bind_vertex_array(Some(self.vaos[i]));
+                self.gl.draw_elements(
+                    glow::TRIANGLES,
+                    self.nums_of_indices[i],
+                    glow::UNSIGNED_INT,
+                    0,
+                );
+            }
             
             self.surface.swap_buffers(&self.context).unwrap();
         }
